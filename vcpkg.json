@@ -3,14 +3,23 @@
   "version-string": "20251009",
   "builtin-baseline": "6d7bf7ef2193e2d1c5798a5ff8811d533104c861",
   "dependencies": [
+    "cairo",
     "freetype",
+    "fontconfig",
+    "glib",
+    "glibmm",
     "harfbuzz",
     "libxml2",
+    "pango",
+    "python3",
     "libiconv",
     "zlib",
+    "libspiro",
     "libpng",
     "gtk3",
+    "gtkmm3",
     "pkgconf",
-    "gettext"
+    "gettext",
+    "woff2"
   ]
 }
