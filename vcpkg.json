@@ -10,6 +10,7 @@
     "zlib",
     "libpng",
     "gtk3",
-    "pkgconf"
+    "pkgconf",
+    "gettext"
   ]
 }
