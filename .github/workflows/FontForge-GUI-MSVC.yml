@@ -13,6 +13,8 @@ jobs:
     env:
       VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/vcpkg-cache,readwrite"
       PYTHON_VERSION: '3.12'  # 统一 Python 版本
+      CC: cl.exe
+      CXX: cl.exe
     
     steps:
       - name: Checkout FontForge source
@@ -38,6 +40,10 @@ jobs:
         with:
           arch: x64
 
+      # 🔴 确保 Ninja 已安装
+      - name: Setup Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v5
+
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
@@ -50,21 +56,37 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      # 设置 pkg-config 路径
+      # 🔴 设置 pkg-config 路径
       - name: Setup pkg-config path
         run: |
           echo "PKG_CONFIG_PATH=$env:VCPKG_ROOT/installed/x64-windows/lib/pkgconfig;$env:VCPKG_ROOT/installed/x64-windows/share/pkgconfig" >> $env:GITHUB_ENV
+          # 验证 vcpkg 安装
+          Write-Host "VCPKG_ROOT: $env:VCPKG_ROOT"
+          Write-Host "PKG_CONFIG_PATH: $env:PKG_CONFIG_PATH"
+          if (Test-Path "$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake") {
+            Write-Host "vcpkg.cmake found"
+          } else {
+            Write-Host "ERROR: vcpkg.cmake not found!"
+            exit 1
+          }
         shell: pwsh
 
       - name: Configure CMake
         run: |
           cd fontforge
           $pythonExe = (Get-Command python).Source
+
+          Write-Host "Python: $pythonExe"
+          Write-Host "VCPKG_ROOT: $env:VCPKG_ROOT"
+          Write-Host "CC: $env:CC"
+          Write-Host "CXX: $env:CXX"
           
           cmake -B build `
             -G "Ninja" `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
             -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_C_COMPILER=cl.exe `
+            -DCMAKE_CXX_COMPILER=cl.exe `
             -DPython3_EXECUTABLE="$pythonExe" `
             -DENABLE_GUI=ON `
             -DENABLE_PYTHON_SCRIPTING=ON `
