@@ -1,0 +1,173 @@
+name: Build FontForge-GUI with MSVC
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  windows-msvc-gui:
+    runs-on: windows-latest
+    env:
+      VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/vcpkg-cache,readwrite"
+      PYTHON_VERSION: '3.12'  # 统一 Python 版本
+    
+    steps:
+      - name: Checkout FontForge source
+        uses: actions/checkout@v4
+        with:
+          path: fontforge
+          # 不指定 ref，自动使用触发分支
+
+      - name: Create vcpkg cache directory
+        run: New-Item -ItemType Directory -Force -Path vcpkg-cache
+
+      - name: Restore vcpkg binary cache
+        id: vcpkg-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: vcpkg-cache
+          key: vcpkg-files-${{ runner.os }}-${{ hashFiles('fontforge/vcpkg.json') }}
+          restore-keys: |
+            vcpkg-files-${{ runner.os }}-
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgJsonGlob: 'fontforge/vcpkg.json'
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Configure CMake
+        run: |
+          cd fontforge
+          $pythonExe = (Get-Command python).Source
+          
+          cmake -B build `
+            -G "Ninja" `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DPython3_EXECUTABLE="$pythonExe" `
+            -DENABLE_GUI=ON `
+            -DENABLE_PYTHON_SCRIPTING=ON `
+            -DENABLE_PYTHON_MODULE=ON `
+            -DENABLE_LIBSPIRO=ON `
+            -DENABLE_WOFF2=ON `
+            -DENABLE_DOCS=OFF `
+            -DENABLE_NLS=ON `
+            -DBUILD_SHARED_LIBS=ON
+        shell: pwsh
+
+      - name: Build FontForge
+        run: |
+          cd fontforge
+          cmake --build build --config Release
+        shell: pwsh
+
+      # 使用嵌入式 Python（与构建版本一致）
+      - name: Setup embedded Python
+        run: |
+          cd fontforge
+          $embedUrl = "https://www.python.org/ftp/python/${{ env.PYTHON_VERSION }}.8/python-${{ env.PYTHON_VERSION }}.8-embed-amd64.zip"
+          New-Item -ItemType Directory -Force -Path build/bin/Lib
+          Invoke-WebRequest -Uri $embedUrl -OutFile python-embed.zip
+          Expand-Archive -Path python-embed.zip -DestinationPath build/bin/Lib -Force
+          Remove-Item -Path python-embed.zip -Force
+          
+          # 移动核心文件
+          Move-Item -Path build/bin/Lib/python*.dll -Destination build/bin/ -Force -ErrorAction SilentlyContinue
+          Move-Item -Path build/bin/Lib/python*.zip -Destination build/bin/ -Force -ErrorAction SilentlyContinue
+          
+          # 启用 site 模块
+          $pypath = "build/bin/Lib/python${{ env.PYTHON_VERSION }}._pth"
+          if (Test-Path $pypath) {
+            $content = Get-Content $pypath -Raw
+            $content = $content -replace '^#import site', 'import site'
+            Set-Content -Path $pypath -Value $content -NoNewline
+          }
+        shell: pwsh
+
+      - name: Copy runtime dependencies
+        run: |
+          cd fontforge
+          $vcpkgBin = "build\vcpkg_installed\x64-windows\bin"
+          $targetBin = "build\bin"
+          
+          # 使用更完整的 DLL 列表
+          $guiDlls = @(
+            "gtk-3-0.dll", "gdk-3-0.dll", "gdk_pixbuf-2.0-0.dll",
+            "pango-1.0-0.dll", "pangocairo-1.0-0.dll", "pangowin32-1.0-0.dll",
+            "cairo-2.dll", "cairo-gobject-2.dll",
+            "glib-2.0-0.dll", "gobject-2.0-0.dll", "gio-2.0-0.dll",
+            "gmodule-2.0-0.dll", "gthread-2.0-0.dll", "intl.dll",
+            "libffi-8.dll", "libpng16-16.dll", "libjpeg-8.dll",
+            "libtiff-5.dll", "libwebp-7.dll", "freetype-6.dll",
+            "fontconfig-1.dll", "expat.dll", "zlib1.dll",
+            "libiconv-2.dll", "libxml2-2.dll", "libxslt-1.dll",
+            "harfbuzz-0.dll", "pangoft2-1.0-0.dll", "epoxy-0.dll",
+            "atk-1.0-0.dll"
+          )
+          
+          foreach ($dll in $guiDlls) {
+            $source = "$vcpkgBin\$dll"
+            if (Test-Path $source) {
+              Copy-Item -Path $source -Destination "$targetBin\" -Force
+            }
+          }
+          
+          # 复制 GTK 资源
+          Copy-Item "$vcpkgBin\..\share\themes\*" -Destination "$targetBin\share\themes\" -Recurse -Force -ErrorAction SilentlyContinue
+          Copy-Item "$vcpkgBin\..\share\icons\*" -Destination "$targetBin\share\icons\" -Recurse -Force -ErrorAction SilentlyContinue
+          
+          # GTK 配置
+          New-Item -ItemType Directory -Force -Path "$targetBin\etc\gtk-3.0"
+          @"
+          [Settings]
+          gtk-theme-name=win32
+          gtk-icon-theme-name=Adwaita
+          gtk-font-name=Segoe UI 9
+          "@ | Out-File -FilePath "$targetBin\etc\gtk-3.0\settings.ini" -Encoding UTF8
+        shell: pwsh
+
+      - name: Create launch script
+        run: |
+          cd fontforge/build/bin
+          $pythonVer = "${{ env.PYTHON_VERSION }}"
+          @"
+          @echo off
+          setlocal
+          set FONTFORGE_HOME=%~dp0
+          set PATH=%FONTFORGE_HOME%;%PATH%
+          set PYTHONHOME=%FONTFORGE_HOME%
+          set PYTHONPATH=%FONTFORGE_HOME%Lib;%FONTFORGE_HOME%
+          "%FONTFORGE_HOME%fontforge.exe" %*
+          "@ | Out-File -FilePath "fontforge-launcher.bat" -Encoding ASCII
+        shell: pwsh
+
+      - name: Upload FontForge Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: FontForge-Windows-MSVC-GUI-NLS-Build
+          path: |
+            fontforge/build/bin/
+            fontforge/build/share/
+            fontforge/build/etc/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Save vcpkg binary cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: vcpkg-cache
+          key: vcpkg-files-${{ runner.os }}-${{ hashFiles('fontforge/vcpkg.json') }}
