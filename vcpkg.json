@@ -14,10 +14,8 @@
     "python3",
     "libiconv",
     "zlib",
-    "libspiro",
     "libpng",
     "gtk3",
-    "gtkmm3",
     "pkgconf",
     "gettext",
     "woff2"
