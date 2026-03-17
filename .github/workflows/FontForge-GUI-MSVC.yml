@@ -33,20 +33,28 @@ jobs:
           restore-keys: |
             vcpkg-files-${{ runner.os }}-
 
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgJsonGlob: 'fontforge/vcpkg.json'
-
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
 
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgJsonGlob: 'fontforge/vcpkg.json'
+
+      
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+
+      # 设置 pkg-config 路径
+      - name: Setup pkg-config path
+        run: |
+          echo "PKG_CONFIG_PATH=$env:VCPKG_ROOT/installed/x64-windows/lib/pkgconfig;$env:VCPKG_ROOT/installed/x64-windows/share/pkgconfig" >> $env:GITHUB_ENV
+        shell: pwsh
 
       - name: Configure CMake
         run: |
