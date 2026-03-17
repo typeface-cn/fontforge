@@ -7,6 +7,9 @@
     "harfbuzz",
     "libxml2",
     "libiconv",
-    "zlib"
+    "zlib",
+    "libpng",
+    "gtk3",
+    "pkgconf"
   ]
 }
