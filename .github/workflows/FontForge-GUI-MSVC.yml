@@ -23,6 +23,13 @@ jobs:
           path: fontforge
           # 不指定 ref，自动使用触发分支
 
+      - name: Checkout libspiro from fontforge/libspiro
+        uses: actions/checkout@v4
+        with:
+          repository: fontforge/libspiro
+          path: libspiro
+          ref: master
+
       - name: Create vcpkg cache directory
         run: New-Item -ItemType Directory -Force -Path vcpkg-cache
 
@@ -56,19 +63,36 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      # 🔴 构建 libspiro (从 fontforge/libspiro 源码)
+      - name: Build libspiro
+        run: |
+          cd libspiro
+          mkdir build
+          cd build
+          cmake -G "Ninja" `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_C_COMPILER=cl.exe `
+            -DCMAKE_CXX_COMPILER=cl.exe `
+            -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/libspiro-install"
+          cmake --build . --config Release
+          cmake --install . --config Release
+        shell: pwsh
+
       # 🔴 设置 pkg-config 路径
       - name: Setup pkg-config path
         run: |
-          echo "PKG_CONFIG_PATH=$env:VCPKG_ROOT/installed/x64-windows/lib/pkgconfig;$env:VCPKG_ROOT/installed/x64-windows/share/pkgconfig" >> $env:GITHUB_ENV
-          # 验证 vcpkg 安装
-          Write-Host "VCPKG_ROOT: $env:VCPKG_ROOT"
-          Write-Host "PKG_CONFIG_PATH: $env:PKG_CONFIG_PATH"
-          if (Test-Path "$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake") {
-            Write-Host "vcpkg.cmake found"
-          } else {
-            Write-Host "ERROR: vcpkg.cmake not found!"
-            exit 1
-          }
+          $libspiroLib = "${{ github.workspace }}/libspiro-install/lib"
+          $libspiroInclude = "${{ github.workspace }}/libspiro-install/include"
+          $vcpkgPkgConfig = "$env:VCPKG_ROOT/installed/x64-windows/lib/pkgconfig;$env:VCPKG_ROOT/installed/x64-windows/share/pkgconfig
+
+          echo "PKG_CONFIG_PATH=$libspiroLib\pkgconfig;$vcpkgPkgConfig" >> $env:GITHUB_ENV
+          echo "LIBSPIRO_ROOT=${{ github.workspace }}/libspiro-install" >> $env:GITHUB_ENV
+          echo "LIBSPIRO_INCLUDE_DIR=$libspiroInclude" >> $env:GITHUB_ENV
+          echo "LIBSPIRO_LIBRARY=$libspiroLib\libspiro.lib" >> $env:GITHUB_ENV
+          
+          Write-Host "LIBSPIRO_ROOT: $env:LIBSPIRO_ROOT"
+          Write-Host "LIBSPIRO_INCLUDE_DIR: $env:LIBSPIRO_INCLUDE_DIR"
+          Write-Host "LIBSPIRO_LIBRARY: $env:LIBSPIRO_LIBRARY"
         shell: pwsh
 
       - name: Configure CMake
@@ -78,6 +102,7 @@ jobs:
 
           Write-Host "Python: $pythonExe"
           Write-Host "VCPKG_ROOT: $env:VCPKG_ROOT"
+          Write-Host "LIBSPIRO_ROOT: $env:LIBSPIRO_ROOT"
           Write-Host "CC: $env:CC"
           Write-Host "CXX: $env:CXX"
           
@@ -92,6 +117,9 @@ jobs:
             -DENABLE_PYTHON_SCRIPTING=ON `
             -DENABLE_PYTHON_MODULE=ON `
             -DENABLE_LIBSPIRO=ON `
+            -DLIBSPIRO_ROOT_DIR="$env:LIBSPIRO_ROOT" `
+            -DLIBSPIRO_INCLUDE_DIR="$env:LIBSPIRO_INCLUDE_DIR" `
+            -DLIBSPIRO_LIBRARY="$env:LIBSPIRO_LIBRARY" `
             -DENABLE_WOFF2=ON `
             -DENABLE_DOCS=OFF `
             -DENABLE_NLS=ON `
@@ -132,6 +160,8 @@ jobs:
           cd fontforge
           $vcpkgBin = "build\vcpkg_installed\x64-windows\bin"
           $targetBin = "build\bin"
+          $libspiroBin = "${{ github.workspace }}/libspiro-install/bin"
+    
           
           # 使用更完整的 DLL 列表
           $guiDlls = @(
@@ -153,6 +183,11 @@ jobs:
             if (Test-Path $source) {
               Copy-Item -Path $source -Destination "$targetBin\" -Force
             }
+          }
+
+          # 复制 libspiro DLL
+          if (Test-Path "$libspiroBin\libspiro-*.dll") {
+            Copy-Item -Path "$libspiroBin\libspiro-*.dll" -Destination "$targetBin\" -Force
           }
           
           # 复制 GTK 资源
