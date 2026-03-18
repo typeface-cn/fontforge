@@ -78,6 +78,8 @@ jobs:
           Write-Host "VCPKG_ROOT: $env:VCPKG_ROOT"
           Write-Host "CC: $env:CC"
           Write-Host "CXX: $env:CXX"
+
+          $msvcDefs = "/DPATH_MAX=260 /D_CRT_SECURE_NO_WARNINGS /D_WIN32_WINNT=0x0A00"
           
           cmake -B build `
             -G "Ninja" `
@@ -85,6 +87,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_C_COMPILER=cl.exe `
             -DCMAKE_CXX_COMPILER=cl.exe `
+            -DCMAKE_C_FLAGS=$msvcDefs `
+            -DCMAKE_CXX_FLAGS=$msvcDefs `
             -DPython3_EXECUTABLE="$pythonExe" `
             -DENABLE_GUI=ON `
             -DENABLE_PYTHON_SCRIPTING=ON `
