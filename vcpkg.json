@@ -16,6 +16,7 @@
     "zlib",
     "libpng",
     "gtk3",
+    "gtkmm",
     "pkgconf",
     "gettext",
     "woff2"
