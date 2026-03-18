@@ -17,6 +17,7 @@
     "libpng",
     "gtk3",
     "gtkmm",
+    "libspiro",
     "pkgconf",
     "gettext",
     "woff2"
