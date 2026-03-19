@@ -33,7 +33,39 @@
 #include "gwidget.h"
 #include "ustring.h"
 
-#include <sys/time.h>
+#ifdef _WIN32
+    #include <windows.h>
+    // Windows 下 gettimeofday 的实现
+    int gettimeofday(struct timeval *tv, struct timezone *tz) {
+        FILETIME ft;
+        unsigned __int64 tmpres = 0;
+        static const unsigned __int64 epoch = 116444736000000000ULL;
+        
+        if (NULL != tv) {
+            GetSystemTimeAsFileTime(&ft);
+            tmpres |= ft.dwHighDateTime;
+            tmpres <<= 32;
+            tmpres |= ft.dwLowDateTime;
+            tmpres -= epoch;
+            tmpres /= 10;
+            tv->tv_sec = (long)(tmpres / 1000000UL);
+            tv->tv_usec = (long)(tmpres % 1000000UL);
+        }
+        return 0;
+    }
+    
+    struct timezone {
+        int tz_minuteswest;
+        int tz_dsttime;
+    };
+    
+    struct timeval {
+        long tv_sec;
+        long tv_usec;
+    };
+#else
+    #include <sys/time.h>
+#endif
 
 typedef struct gprogress {
     struct timeval start_time;	/* Don't pop up unless we're after this */
