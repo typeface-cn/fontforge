@@ -37,6 +37,16 @@
     rectangle of text (left side bearing of first char, right of last char)
 */
 
+// 解决Windows下PATH_MAX未定义问题 START
+#ifdef _WIN32
+#include <windows.h>
+// Windows系统用MAX_PATH替代POSIX的PATH_MAX（值均为260）
+#ifndef PATH_MAX
+#define PATH_MAX MAX_PATH
+#endif
+#endif
+// 解决Windows下PATH_MAX未定义问题 END
+
 GDisplay *screen_display = NULL;
 
 int GDrawPointsToPixels(GWindow gw,int points) {
